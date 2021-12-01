@@ -23,4 +23,5 @@
 
 ##### STEP5.训练对齐
 &emsp;&emsp;完成STEP0~STEP4后，在CoLA上完成训练，并对比最终结果。  
-&emsp;&emsp;复现结果与出现的一些问题见 /STEP5/README
+
+#### 复现结果与出现的**一些问题**见 /STEP5/README！！
