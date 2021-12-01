@@ -50,3 +50,8 @@
 <center><img src="https://github.com/HJHGJGHHG/Paddle-FNet/blob/main/img/1.png"  style="zoom:30%;" width="70%"/></center>
 
 &emsp;&emsp;不过个人调过许多次参，也试着用过Kaggle上的TPU，ACC均未超过0.7……
+
+## TODO:
+&emsp;&emsp;调参
+&emsp;&emsp;用用Kaggle上的TPU
+&emsp;&emsp;重新预训练
