@@ -34,7 +34,7 @@
 * 没随机？  
 &emsp;&emsp;将PyTorch中SequentialSampler改为RandomSampler，Paddle中BatchSampler参数Shuffle=True，结果：
 |  评价指标 | Transformers实现 | Paddle复现 |
-|----- | ----- | ----- |
+| ----- | ----- | ----- |
 | ACC |0.6912751678 | 0.6912751678 |
 
 &emsp;&emsp;……所以原因是啥我也不知道
