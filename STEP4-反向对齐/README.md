@@ -71,5 +71,28 @@ python compare_schedular.py
 ```
 python check_step4.py
 ```
+&emsp;&emsp;可见是完全一致的。
+```
+[2021/12/01 14:02:01] root INFO: loss_0: 
+[2021/12/01 14:02:01] root INFO: 	mean diff: check passed: True, value: 0.0
+[2021/12/01 14:02:01] root INFO: loss_1: 
+[2021/12/01 14:02:01] root INFO: 	mean diff: check passed: True, value: 0.0
+[2021/12/01 14:02:01] root INFO: loss_2: 
+[2021/12/01 14:02:01] root INFO: 	mean diff: check passed: True, value: 0.0
+[2021/12/01 14:02:01] root INFO: loss_3: 
+[2021/12/01 14:02:02] root INFO: 	mean diff: check passed: True, value: 0.0
+[2021/12/01 14:02:02] root INFO: loss_4: 
+[2021/12/01 14:02:02] root INFO: 	mean diff: check passed: True, value: 0.0
+[2021/12/01 14:02:02] root INFO: loss_5: 
+[2021/12/01 14:02:02] root INFO: 	mean diff: check passed: True, value: 0.0
+[2021/12/01 14:02:02] root INFO: loss_6: 
+[2021/12/01 14:02:02] root INFO: 	mean diff: check passed: True, value: 0.0
+[2021/12/01 14:02:02] root INFO: loss_7: 
+[2021/12/01 14:02:02] root INFO: 	mean diff: check passed: True, value: 0.0
+[2021/12/01 14:02:02] root INFO: loss_8: 
+[2021/12/01 14:02:02] root INFO: 	mean diff: check passed: True, value: 0.0
+[2021/12/01 14:02:02] root INFO: loss_9: 
+[2021/12/01 14:02:02] root INFO: 	mean diff: check passed: True, value: 0.0
+[2021/12/01 14:02:02] root INFO: diff check passed
 
-
+```
