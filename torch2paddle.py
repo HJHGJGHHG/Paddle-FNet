@@ -15,18 +15,8 @@ def convert_pytorch_checkpoint_to_paddle(
         version="old", ):
     hf_to_paddle = {
         "embeddings.LayerNorm": "embeddings.layer_norm",
+        ".LayerNorm.": ".layer_norm.",
         "encoder.layer": "encoder.layers",
-        "attention.self.query": "self_attn.q_proj",
-        "attention.self.key": "self_attn.k_proj",
-        "attention.self.value": "self_attn.v_proj",
-        "attention.output.dense": "self_attn.out_proj",
-        "intermediate.dense": "linear1",
-        "output.dense": "linear2",
-        "attention.output.LayerNorm": "norm1",
-        "output.LayerNorm": "norm2",
-        "predictions.decoder.": "predictions.decoder_",
-        "predictions.transform.dense": "predictions.transform",
-        "predictions.transform.LayerNorm": "predictions.layer_norm",
     }
     do_not_transpose = []
     if version == "old":
@@ -45,7 +35,8 @@ def convert_pytorch_checkpoint_to_paddle(
         if k[-7:] == ".weight":
             # embeddings.weight and LayerNorm.weight do not transpose
             if all(d not in k for d in do_not_transpose):
-                if ".embeddings." not in k and ".LayerNorm." not in k:
+                #if ".embeddings." not in k and ".LayerNorm." not in k:
+                if ("embeddings." not in k and ".LayerNorm." not in k) or "embeddings.projection" in k:
                     if v.ndim == 2:
                         v = v.transpose(0, 1)
                         is_transpose = True
@@ -54,13 +45,14 @@ def convert_pytorch_checkpoint_to_paddle(
             k = k.replace(hf_name, pd_name)
         
         # add prefix `fnet.`
-        if "fnet." not in k and "cls." not in k and "classifier" not in k:
-            k = "fnet." + k
+        #if "fnet." not in k and "cls." not in k and "classifier" not in k:
+        #    k = "fnet." + k
         
         print(f"Converting: {oldk} => {k} | is_transpose {is_transpose}")
         paddle_state_dict[k] = v.data.numpy()
     
     paddle.save(paddle_state_dict, paddle_dump_path)
+    return paddle_state_dict
 
 
 def compare(out_torch, out_paddle):
@@ -78,13 +70,13 @@ def compare(out_torch, out_paddle):
 
 def test_forward():
     paddle.set_device("cpu")
-    model_torch = PTFNetModel.from_pretrained("google/fnet-large")
+    model_torch = PTFNetModel.from_pretrained("/root/autodl-tmp/PaddleFNet/model/pytorch/fnet-large/")
     model_paddle = PDFNetModel.from_pretrained("/root/autodl-tmp/PaddleFNet/model/paddle/fnet-large/")
     model_torch.eval()
     model_paddle.eval()
     np.random.seed(42)
     x = np.random.randint(
-        1, model_paddle.bert.config["vocab_size"], size=(4, 64))
+        1, 32000, size=(4, 64))
     input_torch = torch.tensor(x, dtype=torch.int64)
     out_torch = model_torch(input_torch)[0]
     
@@ -98,6 +90,6 @@ def test_forward():
 
 if __name__ == "__main__":
     convert_pytorch_checkpoint_to_paddle(
-        "bert-base-uncased/pytorch_model.bin",
-        "bert-base-uncased/model_state.pdparams")
-    test_forward()
+        '/root/autodl-tmp/PaddleFNet/model/pytorch/fnet-large/pytorch_model.bin',
+        '/root/autodl-tmp/PaddleFNet/model/paddle/fnet-large/model_state.pdparams'
+    )
