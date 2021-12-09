@@ -22,6 +22,12 @@
 &emsp;&emsp;在固定随机量（如Dropout）的情况下期望对齐Loss反向传播过程，详见 /STEP4。
 
 ##### STEP5.训练对齐
-&emsp;&emsp;完成STEP0~STEP4后，在CoLA上完成训练，并对比最终结果。  
+&emsp;&emsp;完成STEP0~STEP4后，在SST2上完成训练，并对比训练精度。  
 
-#### 复现结果与出现的**一些问题**见 /STEP5/README！！
+##### STEP6.复现论文指标
+&emsp;&emsp;完成复现过程后，在SST2&QQP上复现论文结果。  
+
+## 参考
+* https://github.com/JunnYu/paddle_reformer
+* https://github.com/PaddlePaddle/models/blob/tipc/docs/lwfx/ArticleReproduction_NLP.md
+* https://github.com/JunnYu/BERT-SST2-Prod
