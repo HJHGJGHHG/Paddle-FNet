@@ -8,7 +8,11 @@
 
 ## 一、SST2
 &emsp;&emsp;本部分数据承载自 SST2（GLUE）。
-
+```
+cd STEP5-训练对齐/torch_train
+python train_sst2.py
+cd ../paddle_train & python train_sst2.py
+```
 &emsp;&emsp;相关参数：（单机单卡单精）
 * LR = 2e-5
 * batch_size = 8
@@ -24,58 +28,28 @@
 [2021/12/10 15:03:38] root INFO: diff check passed
 ```
 
-&emsp;&emsp;训练Loss如下：
+&emsp;&emsp;训练Loss如下：（红：PaddlePaddle  蓝：Pytorch）
 <center><img src="./sst2_loss_compare.png"  style="zoom:30%;" width="110%"/></center>
 &emsp;&emsp;可以发现二者Loss变化趋势接近且差异在可接受的范围内。
 
-
-## 三、CoLA
-&emsp;&emsp;本部分数据承载自 CoLA（GLUE）。
+## 二、QQP
+&emsp;&emsp;本部分数据承载自 QQP（GLUE）。
 
 &emsp;&emsp;相关参数：（单机单卡单精）
-* LR = 2e-5
+* LR = 3e-5
 * batch_size = 16
 * seed = 1234
 * optimizer = AdamW
-* LR-sheduler = Linear （Warmup Steps: 0）
-* epochs = 2
+* LR-sheduler = Linear （Warmup Steps: 3000）
+* epochs = 1
 
-&emsp;&emsp;结果对比
-&emsp;&emsp;预训练模型取fnet-large。在CoLA validation数据集上有：
-
-|  评价指标 | 原论文 | Transformers实现 | Paddle复现 |
-|  :--:  |  :--:   | : --:   | : --: |
-| ACC | 78% |0.6912751678 | 0.6912751678 |
-| Time Cost | - |0:02:54 | 0:03:42 |
-
-&emsp;&emsp;相关结果见train_align_diff.log：
+&emsp;&emsp;预训练模型取fnet-large，在SST2 validation数据集上有：
 ```
-[2021/12/01 15:34:46] root INFO: acc: 
-[2021/12/01 15:34:46] root INFO: 	mean diff: check passed: True, value: 0.0
-[2021/12/01 15:34:46] root INFO: diff check passed
+[2021/12/12 12:48:47] root INFO: f1: 
+[2021/12/12 12:48:47] root INFO: 	mean diff: check passed: True, value: 0.001161899850096404
+[2021/12/12 12:48:47] root INFO: diff check passed
 ```
-## 问题来了!为啥结果一模一样！！！而且ACC远低于原论文的0.78？？？
-##### 1.结果完全一致：
-* 没随机？
-&emsp;&emsp;将PyTorch中SequentialSampler改为RandomSampler，Paddle中BatchSampler参数Shuffle=True，结果：
-|  评价指标 | Transformers实现 | Paddle复现 |
-|  :--:  | : --:   | : --: |
-| ACC |0.6912751678 | 0.6912751678 |
 
-&emsp;&emsp;……所以原因是啥我也不知道
+&emsp;&emsp;训练Loss如下：（粉红：PaddlePaddle  绿：Pytorch）
+<center><img src="./qqp_loss_compare.png"  style="zoom:30%;" width="110%"/></center>
 
-##### 2.指标不如原论文
-&emsp;&emsp;真是头疼……你说paddle复现的效果不行也就算了，为啥用HuggingFace上的也不行？？？？
-&emsp;&emsp;至于为什么差异这么大，个人猜想：
-
-1. 原论文预训练在 TPU 上完成，相关算子或有差异；  
-2. 超参未知。在Huggingface官方Pytorch模型的文档（https://huggingface.co/google/fnet-base/tree/main/ ）中有如下论述：
-> Note that the training hyperparameters of the reproduced models were not the same as the official model, so the performance may differ significantly for some tasks (for example: CoLA). 
-
-<center><img src="https://github.com/HJHGJGHHG/Paddle-FNet/blob/main/img/1.png"  style="zoom:30%;" width="70%"/></center>
-
-
-##### TODO:
-&emsp;&emsp;调参
-&emsp;&emsp;用用Kaggle上的TPU
-&emsp;&emsp;重新预训练

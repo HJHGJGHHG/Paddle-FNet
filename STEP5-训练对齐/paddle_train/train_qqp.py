@@ -2,12 +2,11 @@ import datetime
 import random
 import time
 from functools import partial
-
+import logging
 import numpy as np
 import paddle
 import paddle.nn as nn
 import utils
-from paddle.metric import Accuracy
 from paddle.optimizer import AdamW
 from paddlenlp.data import Dict, Pad, Stack
 from paddlenlp.datasets import load_dataset
@@ -15,58 +14,21 @@ from reprod_log import ReprodLogger
 
 from tokenizer import FNetTokenizer
 from modeling import FNetForSequenceClassification
+from paddle_metric import F1_score
+
+logger = logging.getLogger(__name__)
+logger.setLevel(level=logging.INFO)
+handler = logging.FileHandler("paddle_qqp_log.txt")
+handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 
-def train_one_epoch(
-        model,
-        criterion,
-        optimizer,
-        lr_scheduler,
-        data_loader,
-        epoch,
-        print_freq,
-        scaler=None, ):
-    model.train()
-    metric_logger = utils.MetricLogger(delimiter="  ")
-    metric_logger.add_meter(
-        "lr", utils.SmoothedValue(
-            window_size=1, fmt="{value}"))
-    metric_logger.add_meter(
-        "sentence/s", utils.SmoothedValue(
-            window_size=10, fmt="{value}"))
-    
-    header = "Epoch: [{}]".format(epoch)
-    for batch in metric_logger.log_every(data_loader, print_freq, header):
-        inputs = {"input_ids": batch[0], "token_type_ids": batch[1]}
-        labels = batch[2]
-        start_time = time.time()
-        with paddle.amp.auto_cast(
-                enable=scaler is not None,
-                custom_white_list=["layer_norm", "softmax", "gelu"], ):
-            logits = model(**inputs)
-            loss = criterion(
-                logits.reshape([-1, model.num_classes]),
-                labels.reshape([-1, ]), )
-        
-        optimizer.clear_grad()
-        if scaler is not None:
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
-        else:
-            loss.backward()
-            optimizer.step()
-        lr_scheduler.step()
-        batch_size = inputs["input_ids"].shape[0]
-        metric_logger.update(loss=loss.item(), lr=lr_scheduler.get_lr())
-        metric_logger.meters["sentence/s"].update(batch_size /
-                                                  (time.time() - start_time))
-
-
-def evaluate(model, criterion, data_loader, metric, print_freq=100):
+def evaluate(model, criterion, data_loader, metric, print_freq=100, logger=logger):
     model.eval()
     metric.reset()
-    metric_logger = utils.MetricLogger(delimiter="  ")
+    metric_logger = utils.MetricLogger(logger=logger, delimiter="  ")
     header = "Test:"
     with paddle.no_grad():
         for batch in metric_logger.log_every(data_loader, print_freq, header):
@@ -79,15 +41,17 @@ def evaluate(model, criterion, data_loader, metric, print_freq=100):
             metric_logger.update(loss=loss.item())
             corrects = metric.compute(logits, labels)
             metric.update(corrects=corrects, labels=labels)
-        acc_global_avg = metric.accumulate()
+        f1_global_avg = metric.accumulate()
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
-    print(" * Accuracy {acc_global_avg:.10f}".format(
-        acc_global_avg=acc_global_avg))
-    return acc_global_avg
+    print(" * F1 {f1_global_avg:.10f}".format(
+        f1_global_avg=f1_global_avg))
+    logger.info(" * F1 {f1_global_avg:.10f}".format(
+        f1_global_avg=f1_global_avg))
+    return f1_global_avg
 
 
-def set_seed(seed=42):
+def set_seed(seed=1234):
     random.seed(seed)
     np.random.seed(seed)
     paddle.seed(seed)
@@ -95,7 +59,8 @@ def set_seed(seed=42):
 
 def convert_example(example, tokenizer, max_length=128):
     labels = np.array([example["labels"]], dtype="int64")
-    example = tokenizer(example["sentence"], max_seq_len=max_length)
+    text = (example["sentence1"], example["sentence2"])
+    example = tokenizer(*text, max_seq_len=max_length)
     return {
         "input_ids": example["input_ids"],
         "token_type_ids": example["token_type_ids"],
@@ -114,7 +79,7 @@ def load_data(args, tokenizer):
     validation_ds = validation_ds.map(trans_func, lazy=False)
     
     train_sampler = paddle.io.BatchSampler(
-        train_ds, batch_size=args.batch_size, shuffle=True)
+        train_ds, batch_size=args.batch_size, shuffle=False)
     validation_sampler = paddle.io.BatchSampler(
         validation_ds, batch_size=args.batch_size, shuffle=False)
     
@@ -158,6 +123,7 @@ def main(args):
     classifier_weights = paddle.load(
         "../classifier_weights/paddle_classifier_weights.bin")
     model.load_dict(classifier_weights)
+    
     print("Creating criterion")
     criterion = nn.CrossEntropyLoss()
     
@@ -180,7 +146,7 @@ def main(args):
         weight_decay=args.weight_decay,
         epsilon=1e-6,
         apply_decay_param_fun=lambda x: x in decay_params, )
-    metric = Accuracy()
+    metric = F1_score()
     
     if args.test_only:
         evaluate(model, criterion, validation_data_loader, metric)
@@ -188,28 +154,55 @@ def main(args):
     
     print("Start training")
     start_time = time.time()
-    best_accuracy = 0.0
+    losses = []
     for epoch in range(args.num_train_epochs):
+        model.train()
+        metric_logger = utils.MetricLogger(logger=logger, delimiter="  ")
+        metric_logger.add_meter(
+            "lr", utils.SmoothedValue(
+                window_size=1, fmt="{value}"))
+        metric_logger.add_meter(
+            "sentence/s", utils.SmoothedValue(
+                window_size=10, fmt="{value}"))
         
-        train_one_epoch(
-            model,
-            criterion,
-            optimizer,
-            lr_scheduler,
-            train_data_loader,
-            epoch,
-            args.print_freq,
-            scaler, )
-        acc = evaluate(model, criterion, validation_data_loader, metric)
-        best_accuracy = max(best_accuracy, acc)
+        header = "Epoch: [{}]".format(epoch)
+        for batch in metric_logger.log_every(train_data_loader, args.print_freq, header):
+            inputs = {"input_ids": batch[0], "token_type_ids": batch[1]}
+            labels = batch[2]
+            start_time = time.time()
+            with paddle.amp.auto_cast(
+                    enable=scaler is not None,
+                    custom_white_list=["layer_norm", "softmax", "gelu"], ):
+                logits = model(**inputs)
+                loss = criterion(
+                    logits.reshape([-1, model.num_classes]),
+                    labels.reshape([-1, ]), )
+            
+            optimizer.clear_grad()
+            if scaler is not None:
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                loss.backward()
+                optimizer.step()
+            losses.append(loss.item())
+            lr_scheduler.step()
+            batch_size = inputs["input_ids"].shape[0]
+            metric_logger.update(loss=loss.item(), lr=lr_scheduler.get_lr())
+            metric_logger.meters["sentence/s"].update(batch_size /
+                                                      (time.time() - start_time))
+        
         if args.output_dir:
             model.save_pretrained(args.output_dir)
             tokenizer.save_pretrained(args.output_dir)
     
+    f1 = evaluate(model, criterion, validation_data_loader, metric, logger=logger)
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print("Training time {}".format(total_time_str))
-    return best_accuracy
+    logger.info("Training time {}".format(total_time_str))
+    return f1, losses
 
 
 def get_args_parser(add_help=True):
@@ -224,7 +217,7 @@ def get_args_parser(add_help=True):
     parser.add_argument("--batch_size", default=16, type=int)
     parser.add_argument("--max_length", type=int, default=128,
                         help="The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,")
-    parser.add_argument("--num_train_epochs", default=2, type=int,
+    parser.add_argument("--num_train_epochs", default=1, type=int,
                         help="number of total epochs to run")
     parser.add_argument("--workers", default=0, type=int,
                         help="number of data loading workers (default: 16)", )
@@ -235,9 +228,11 @@ def get_args_parser(add_help=True):
     parser.add_argument("--lr_scheduler_type", default="linear",
                         help="the scheduler type to use.",
                         choices=["linear", "cosine", "polynomial"], )
-    parser.add_argument("--num_warmup_steps", default=0, type=int,
+    parser.add_argument("--num_warmup_steps", default=3000, type=int,
                         help="number of steps for the warmup in the lr scheduler.", )
     parser.add_argument("--print_freq", default=10, type=int, help="print frequency")
+    parser.add_argument("--eval_freq", default=1500, type=int, help="evaluation frequency")
+    parser.add_argument("--early_stop", default=500, type=int, help="early stop iters")
     parser.add_argument("--output_dir", default="outputs", help="path where to save")
     parser.add_argument("--test_only", help="only test the model", action="store_true", )
     parser.add_argument("--seed", default=1234, type=int,
@@ -251,7 +246,9 @@ def get_args_parser(add_help=True):
 
 if __name__ == "__main__":
     args = get_args_parser().parse_args()
-    acc = main(args)
+    f1, losses = main(args)
     reprod_logger = ReprodLogger()
-    reprod_logger.add("acc", np.array([acc]))
-    reprod_logger.save("qqp_train_align_paddle.npy")
+    reprod_logger.add("f1", np.array([f1]))
+    reprod_logger.save(
+        "qqp_train_align_paddle.npy")
+    np.save("paddle_qqp_losses.npy", np.array(losses))

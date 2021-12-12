@@ -13,6 +13,8 @@ from torch import nn
 from transformers import AdamW, FNetTokenizer, DataCollatorWithPadding, get_scheduler
 from transformers.models.fnet import FNetForSequenceClassification
 
+from sklearn.metrics import f1_score
+
 logger = logging.getLogger(__name__)
 logger.setLevel(level=logging.INFO)
 handler = logging.FileHandler("torch_qqp_log.txt")
@@ -38,21 +40,25 @@ def evaluate(model, criterion, data_loader, device, metric, logger, print_freq=1
     model.eval()
     metric_logger = utils.MetricLogger(logger=logger, delimiter="  ")
     header = "Test:"
+    preds, labels = [], []
     with torch.no_grad():
         for batch in metric_logger.log_every(data_loader, print_freq, header):
             batch.to(device)
-            labels = batch.pop("labels")
-            print(labels)
+            label = batch.pop("labels")
             logits = model(**batch)[0]
             loss = criterion(
-                logits.reshape(-1, model.num_labels), labels.reshape(-1))
+                logits.reshape(-1, model.num_labels), label.reshape(-1))
+            
+            preds.extend(logits.argmax(-1).cpu().numpy())
+            labels.extend(label.cpu().numpy())
             metric_logger.update(loss=loss.item())
             metric.add_batch(
                 predictions=logits.argmax(dim=-1),
-                references=labels, )
+                references=label, )
     metric_result = metric.compute()
     print(metric_result)
-    f1_global_avg = metric_result["f1"]
+    # f1_global_avg = metric_result["f1"]
+    f1_global_avg = f1_score(labels, preds)
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print(" * F1 {f1_global_avg:.10f}".format(
@@ -172,8 +178,8 @@ def main(args):
         num_warmup_steps=args.num_warmup_steps,
         num_training_steps=args.num_train_epochs * len(train_data_loader), )
     
-    # metric = load_metric("metric.py")
-    metric = load_metric('glue', 'qqp')
+    metric = load_metric("metric.py")
+    # metric = load_metric('glue', 'qqp')
     if args.test_only:
         evaluate(model, criterion, validation_data_loader, logger=logger, device=device, metric=metric)
         return

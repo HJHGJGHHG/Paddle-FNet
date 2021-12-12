@@ -138,16 +138,16 @@ class FNetEncoder(Layer):
                  hidden_act,
                  num_hidden_layers):
         super().__init__()
-        self.fnet_layers = nn.LayerList([FNetLayer(hidden_size,
-                                                   intermediate_size,
-                                                   layer_norm_eps,
-                                                   hidden_dropout_prob,
-                                                   hidden_act) for _ in range(num_hidden_layers)])
+        self.layers = nn.LayerList([FNetLayer(hidden_size,
+                                              intermediate_size,
+                                              layer_norm_eps,
+                                              hidden_dropout_prob,
+                                              hidden_act) for _ in range(num_hidden_layers)])
         self.gradient_checkpointing = False
     
-    def forward(self, hidden_states, output_hidden_states=False, return_dict=False):
+    def forward(self, hidden_states, output_hidden_states=False, return_dict=True):
         all_hidden_states = () if output_hidden_states else None
-        for i, layer_module in enumerate(self.fnet_layers):
+        for i, layer_module in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
             layer_outputs = layer_module(hidden_states)
