@@ -1,5 +1,5 @@
 # STEP3-损失函数对齐
-&emsp;&emsp;在本节中，我们期望对齐损失函数：CrossEntropyLoss()
+&emsp;&emsp;在本节中，我们期望对齐损失函数：CrossEntropyLoss()  
 &emsp;&emsp;文件目录：
 
 ```
