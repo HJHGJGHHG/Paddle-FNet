@@ -23,7 +23,7 @@
 | SST-2 | [01:09:27](https://huggingface.co/gchhablani/fnet-base-finetuned-sst2) | [01:42:17](https://huggingface.co/gchhablani/bert-base-cased-finetuned-sst2)|
 | SUM | 07:30:43 | 11:07:18 |
 
-&emsp;&emsp;Time：$FNet/BERT=67.5\%$
+&emsp;&emsp;Time：$FNet/BERT=0.675$
 
 ## paddle复现
 ### 1.最优结果
