@@ -1,5 +1,5 @@
 # STEP4-反向对齐
-&emsp;&emsp;在本节中，我们期望对齐Scheduler、Optimizer、正则化策略以及最终实现两个模型反向传播的对齐。
+&emsp;&emsp;在本节中，我们期望对齐Scheduler、Optimizer、正则化策略以及最终实现两个模型反向传播的对齐。  
 &emsp;&emsp;文件目录：
 
 ```
