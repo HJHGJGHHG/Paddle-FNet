@@ -7,7 +7,7 @@
 ##### STEP0. 权重转换
 &emsp;&emsp;Huggingface上的：[FNet-base](https://huggingface.co/google/fnet-base) 、[FNet-large ](https://huggingface.co/google/fnet-large)   
 &emsp;&emsp;转换脚本：https://github.com/HJHGJGHHG/Paddle-FNet/blob/main/torch2paddle.py  
-&emsp;&emsp;也可以用我传到HF上的模型：[Paddle-FNet-base](https://huggingface.co/google/fnet-base) 、[Paddle-FNet-large](https://huggingface.co/google/fnet-large)  
+&emsp;&emsp;也可以用我传到HF上的模型：[Paddle-FNet-base](https://huggingface.co/HJHGJGHHG/paddle-fnet-base) 、[Paddle-FNet-large](https://huggingface.co/HJHGJGHHG/paddle-fnet-large)  
 
 ##### STEP1. 前向对齐
 &emsp;&emsp;期望对齐模型结构，详见 /STEP1。  
