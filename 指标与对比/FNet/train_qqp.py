@@ -17,9 +17,7 @@ from modeling import FNetForSequenceClassification
 from paddle_metric import F1_score
 
 
-
-
-def evaluate(model, criterion, data_loader, metric, print_freq=100, logger=logger):
+def evaluate(model, criterion, data_loader, metric,  logger, print_freq=100):
     model.eval()
     metric.reset()
     metric_logger = utils.MetricLogger(logger=logger, delimiter="  ")
@@ -104,6 +102,7 @@ def main(args):
     if args.seed is not None:
         set_seed(args.seed)
     
+    logger.info(str(args))
     tokenizer = FNetTokenizer.from_pretrained(args.model_name_or_path)
     batchify_fn = lambda samples, fn=Dict({
         "input_ids": Pad(axis=0, pad_val=tokenizer.pad_token_id),
@@ -235,9 +234,9 @@ def get_args_parser(add_help=True):
         description="Paddle QQP Classification Training", add_help=add_help)
     parser.add_argument("--task_name", default="qqp",
                         help="the name of the glue task to train on.")
-    parser.add_argument("--logger_file", default="sst2_log_base.txt",
+    parser.add_argument("--logging_file", default="qqp_log_base.txt",
                         help="path to save logging information")
-    parser.add_argument("--model_name_or_path", default="/root/autodl-tmp/PaddleFNet/model/paddle/fnet-large/",
+    parser.add_argument("--model_name_or_path", default="fnet-base",
                         help="path to pretrained model or model identifier from huggingface.co/models.", )
     parser.add_argument("--device", default="gpu", help="device")
     parser.add_argument("--batch_size", default=16, type=int)

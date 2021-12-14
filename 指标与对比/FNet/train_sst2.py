@@ -95,7 +95,8 @@ def main(args):
     
     if args.seed is not None:
         set_seed(args.seed)
-    
+
+    logger.info(str(args))
     tokenizer = FNetTokenizer.from_pretrained(args.model_name_or_path)
     batchify_fn = lambda samples, fn=Dict({
         "input_ids": Pad(axis=0, pad_val=tokenizer.pad_token_id),
@@ -226,7 +227,7 @@ def get_args_parser(add_help=True):
                         help="the name of the glue task to train on.")
     parser.add_argument("--logger_file", default="sst2_log_base.txt",
                         help="path to save logging information")
-    parser.add_argument("--model_name_or_path", default="/root/autodl-tmp/PaddleFNet/model/paddle/fnet-base/",
+    parser.add_argument("--model_name_or_path", default="fnet-base",
                         help="path to pretrained model or model identifier from huggingface.co/models.", )
     parser.add_argument("--device", default="gpu", help="device")
     parser.add_argument("--batch_size", default=16, type=int)
