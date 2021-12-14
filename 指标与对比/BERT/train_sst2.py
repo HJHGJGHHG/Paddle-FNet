@@ -6,46 +6,40 @@ import logging
 import numpy as np
 import paddle
 import paddle.nn as nn
-import utils
+from paddle.metric import Accuracy
 from paddle.optimizer import AdamW
 from paddlenlp.data import Dict, Pad, Stack
 from paddlenlp.datasets import load_dataset
-from sklearn.metrics import accuracy_score
+from paddlenlp.transformers.bert.tokenizer import BertTokenizer
+from paddlenlp.transformers.bert.modeling import BertForSequenceClassification
 
-from tokenizer import FNetTokenizer
-from modeling import FNetForSequenceClassification
-from paddle_metric import F1_score
+import utils
 
 
-def evaluate(model, criterion, data_loader, metric,  logger, print_freq=100):
+def evaluate(model, criterion, data_loader, metric, logger, print_freq=100):
     model.eval()
     metric.reset()
     metric_logger = utils.MetricLogger(logger=logger, delimiter="  ")
     header = "Test:"
-    labels, preds = [], []
     with paddle.no_grad():
         for batch in metric_logger.log_every(data_loader, print_freq, header):
             inputs = {"input_ids": batch[0], "token_type_ids": batch[1]}
-            label = batch[2]
+            labels = batch[2]
             logits = model(**inputs)
             loss = criterion(
                 logits.reshape([-1, model.num_classes]),
-                label.reshape([-1, ]), )
+                labels.reshape([-1, ]), )
             metric_logger.update(loss=loss.item())
-            corrects = metric.compute(logits, label)
-            metric.update(corrects=corrects, labels=label)
-            labels.extend(label.cpu().numpy())
-            preds.extend(logits.cpu().numpy().argmax(-1))
-        f1_global_avg = metric.accumulate()
-        acc_global_avg = accuracy_score(labels, preds)
-        score_global_avg = (f1_global_avg + acc_global_avg) / 2
+            corrects = metric.compute(logits, labels)
+            metric.update(corrects)
+        acc_global_avg = metric.accumulate()
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
-    print(" * Mean(F1+ACC) {score_global_avg:.10f}".format(
-        score_global_avg=score_global_avg))
-    logger.info(" * Mean(F1+ACC) {score_global_avg:.10f}".format(
-        score_global_avg=score_global_avg))
-    return score_global_avg
+    print(" * Accuracy {acc_global_avg:.10f}".format(
+        acc_global_avg=acc_global_avg))
+    logger.info(" * Accuracy {acc_global_avg:.10f}".format(
+        acc_global_avg=acc_global_avg))
+    return acc_global_avg
 
 
 def set_seed(seed=1234):
@@ -56,8 +50,7 @@ def set_seed(seed=1234):
 
 def convert_example(example, tokenizer, max_length=128):
     labels = np.array([example["labels"]], dtype="int64")
-    text = (example["sentence1"], example["sentence2"])
-    example = tokenizer(*text, max_seq_len=max_length)
+    example = tokenizer(example["sentence"], max_seq_len=max_length)
     return {
         "input_ids": example["input_ids"],
         "token_type_ids": example["token_type_ids"],
@@ -76,7 +69,7 @@ def load_data(args, tokenizer):
     validation_ds = validation_ds.map(trans_func, lazy=False)
     
     train_sampler = paddle.io.BatchSampler(
-        train_ds, batch_size=args.batch_size, shuffle=False)
+        train_ds, batch_size=args.batch_size, shuffle=True)
     validation_sampler = paddle.io.BatchSampler(
         validation_ds, batch_size=args.batch_size, shuffle=False)
     
@@ -91,6 +84,7 @@ def main(args):
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
     logger.addHandler(handler)
+    
     if args.output_dir:
         utils.mkdir(args.output_dir)
     print(args)
@@ -103,7 +97,7 @@ def main(args):
         set_seed(args.seed)
     
     logger.info(str(args))
-    tokenizer = FNetTokenizer.from_pretrained(args.model_name_or_path)
+    tokenizer = BertTokenizer.from_pretrained(args.model_name_or_path)
     batchify_fn = lambda samples, fn=Dict({
         "input_ids": Pad(axis=0, pad_val=tokenizer.pad_token_id),
         "token_type_ids": Pad(axis=0, pad_val=tokenizer.pad_token_type_id),
@@ -123,7 +117,7 @@ def main(args):
         collate_fn=batchify_fn, )
     
     print("Creating model")
-    model = FNetForSequenceClassification.from_pretrained(
+    model = BertForSequenceClassification.from_pretrained(
         args.model_name_or_path, num_classes=2)
     
     print("Creating criterion")
@@ -146,18 +140,18 @@ def main(args):
         learning_rate=lr_scheduler,
         parameters=model.parameters(),
         weight_decay=args.weight_decay,
-        epsilon=1e-6,
+        epsilon=1e-8,
         apply_decay_param_fun=lambda x: x in decay_params, )
-    metric = F1_score()
+    metric = Accuracy()
     
     if args.test_only:
-        evaluate(model, criterion, validation_data_loader, metric)
+        evaluate(model, criterion, validation_data_loader, metric, logger)
         return
     
     print("Start training")
     start_time = time.time()
     steps = last_improvement = 0
-    best_score = 0.0
+    best_acc = 0.0
     for epoch in range(args.num_train_epochs):
         model.train()
         metric_logger = utils.MetricLogger(logger=logger, delimiter="  ")
@@ -190,22 +184,22 @@ def main(args):
             else:
                 loss.backward()
                 optimizer.step()
-            lr_scheduler.step()
             steps += 1
+            lr_scheduler.step()
             
             if steps % args.eval_freq == 0:
-                score = evaluate(model, criterion, validation_data_loader, metric, logger=logger)
-                if score > best_score:
-                    best_score = score
+                acc = evaluate(model, criterion, validation_data_loader, metric, logger=logger)
+                if acc > best_acc:
+                    best_acc = acc
                     last_improvement = steps
                 elif steps - last_improvement > args.early_stop:
                     logger.info("It's been a long time since the last improvement! Early stop!")
                     total_time = time.time() - start_time
                     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-                    print("Training time {}".format(total_time_str))
-                    logger.info("Training time {}".format(total_time_str))
-                    logger.info("* Mean(F1+ACC) : {:8f} *".format(score))
-                    return best_score
+                    print("Total time {}".format(total_time_str))
+                    logger.info("Total time {}".format(total_time_str))
+                    logger.info("* Best ACC : {:8f} *".format(best_acc))
+                    return best_acc
             
             batch_size = inputs["input_ids"].shape[0]
             metric_logger.update(loss=loss.item(), lr=lr_scheduler.get_lr())
@@ -216,45 +210,45 @@ def main(args):
             model.save_pretrained(args.output_dir)
             tokenizer.save_pretrained(args.output_dir)
     
-    score = evaluate(model, criterion, validation_data_loader, metric, logger=logger)
+    acc = evaluate(model, criterion, validation_data_loader, metric, logger=logger)
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print("Total time {}".format(total_time_str))
     logger.info("Total time {}".format(total_time_str))
-    logger.info("* Mean(F1+ACC) : {:8f} *".format(score))
-    return score
+    logger.info("* Best ACC : {:8f} *".format(acc))
+    return acc
 
 
 def get_args_parser(add_help=True):
     import argparse
     parser = argparse.ArgumentParser(
-        description="Paddle QQP Classification Training", add_help=add_help)
-    parser.add_argument("--task_name", default="qqp",
+        description="Paddle BERT SST2 Classification Training", add_help=add_help)
+    parser.add_argument("--task_name", default="sst-2",
                         help="the name of the glue task to train on.")
-    parser.add_argument("--logging_file", default="qqp_log_base.txt",
+    parser.add_argument("--logger_file", default="sst2_log_base.txt",
                         help="path to save logging information")
-    parser.add_argument("--model_name_or_path", default="fnet-base",
+    parser.add_argument("--model_name_or_path", default="bert-base-uncased",
                         help="path to pretrained model or model identifier from huggingface.co/models.", )
     parser.add_argument("--device", default="gpu", help="device")
     parser.add_argument("--batch_size", default=16, type=int)
     parser.add_argument("--max_length", type=int, default=128,
                         help="The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,")
-    parser.add_argument("--num_train_epochs", default=2, type=int,
+    parser.add_argument("--num_train_epochs", default=3, type=int,
                         help="number of total epochs to run")
     parser.add_argument("--workers", default=0, type=int,
                         help="number of data loading workers (default: 16)", )
-    parser.add_argument("--lr", default=3e-5, type=float, help="initial learning rate")
+    parser.add_argument("--lr", default=2e-5, type=float, help="initial learning rate")
     parser.add_argument("--weight_decay", default=1e-2, type=float,
                         help="weight decay (default: 1e-2)",
                         dest="weight_decay", )
     parser.add_argument("--lr_scheduler_type", default="linear",
                         help="the scheduler type to use.",
                         choices=["linear", "cosine", "polynomial"], )
-    parser.add_argument("--num_warmup_steps", default=3000, type=int,
+    parser.add_argument("--num_warmup_steps", default=1000, type=int,
                         help="number of steps for the warmup in the lr scheduler.", )
     parser.add_argument("--print_freq", default=100, type=int, help="print frequency")
-    parser.add_argument("--eval_freq", default=2000, type=int, help="evaluation frequency")
-    parser.add_argument("--early_stop", default=10000, type=int, help="early stop iters")
+    parser.add_argument("--eval_freq", default=300, type=int, help="evaluation frequency")
+    parser.add_argument("--early_stop", default=1500, type=int, help="early stop iters")
     parser.add_argument("--output_dir", default="outputs", help="path where to save")
     parser.add_argument("--test_only", help="only test the model", action="store_true", )
     parser.add_argument("--seed", default=1234, type=int,
@@ -268,5 +262,5 @@ def get_args_parser(add_help=True):
 
 if __name__ == "__main__":
     args = get_args_parser().parse_args()
-    score = main(args)
-    print("* Mean(F1+ACC) : {:8f} *".format(score))
+    acc = main(args)
+    print("* Best ACC : {:8f} *".format(acc))
