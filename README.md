@@ -1,14 +1,12 @@
 # Paddle FNet 复现文档
 ## 目标
 &emsp;&emsp;基于PaddlePaddle复现FNet。
-## 论文要点
+## 摘要
+&emsp;&emsp;我们证明，通过用简单的线性转换可以取代自注意力层，transformer编码器架构可以通过“混合”输入标记的线性转换来大幅提高速度，精度成本有限。这些线性变换，以及前馈层中简单的非线性层，足以在几个文本分类任务中建模语义关系。也许最令人惊讶的是，我们发现用标准的、非参数化的傅里叶变换替换transformer编码器中的自注意层在GLUE基准上实现了92%的精度，但在GPU上运行速度快7倍，在TPU上快两倍。所得到的模型，我们命名为FNet，非常有效地扩展到长输入，与 the Long Range Arena benchmark上最精确的“高效的”transformer的精度相匹配，但在GPU上的**所有序列长度**和TPU上相对较短的序列长度上训练和运行得更快。最后，FNet具有较轻的内存占用，在较小的模型尺寸下特别有效：对于固定的速度和精度预算，小的FNet模型优于transformer对应的模型。
 
 ## 复现过程
 ##### STEP0. 权重转换
-&emsp;&emsp;详见 /STEP0。  
-&emsp;&emsp;Huggingface上的：[FNet-base](https://huggingface.co/google/fnet-base) 、[FNet-large ](https://huggingface.co/google/fnet-large)   
-&emsp;&emsp;转换脚本：https://github.com/HJHGJGHHG/Paddle-FNet/blob/main/torch2paddle.py  
-&emsp;&emsp;也可以用我传到HF上的模型：[Paddle-FNet-base](https://huggingface.co/HJHGJGHHG/paddle-fnet-base) 、[Paddle-FNet-large](https://huggingface.co/HJHGJGHHG/paddle-fnet-large)  
+&emsp;&emsp;转换预训练权重。详见 /STEP0。  
 
 ##### STEP1. 前向对齐
 &emsp;&emsp;期望对齐模型结构，详见 /STEP1。  
