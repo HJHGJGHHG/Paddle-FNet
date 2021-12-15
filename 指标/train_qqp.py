@@ -11,13 +11,12 @@ from paddle.optimizer import AdamW
 from paddlenlp.data import Dict, Pad, Stack
 from paddlenlp.datasets import load_dataset
 from sklearn.metrics import accuracy_score
-
-from tokenizer import FNetTokenizer
-from modeling import FNetForSequenceClassification
+from paddlenlp.transformers.bert.tokenizer import BertTokenizer
+from paddlenlp.transformers.bert.modeling import BertForSequenceClassification
 from paddle_metric import F1_score
 
 
-def evaluate(model, criterion, data_loader, metric,  logger, print_freq=100):
+def evaluate(model, criterion, data_loader, metric, logger, print_freq=100):
     model.eval()
     metric.reset()
     metric_logger = utils.MetricLogger(logger=logger, delimiter="  ")
@@ -103,7 +102,7 @@ def main(args):
         set_seed(args.seed)
     
     logger.info(str(args))
-    tokenizer = FNetTokenizer.from_pretrained(args.model_name_or_path)
+    tokenizer = BertTokenizer.from_pretrained(args.model_name_or_path)
     batchify_fn = lambda samples, fn=Dict({
         "input_ids": Pad(axis=0, pad_val=tokenizer.pad_token_id),
         "token_type_ids": Pad(axis=0, pad_val=tokenizer.pad_token_type_id),
@@ -123,7 +122,7 @@ def main(args):
         collate_fn=batchify_fn, )
     
     print("Creating model")
-    model = FNetForSequenceClassification.from_pretrained(
+    model = BertForSequenceClassification.from_pretrained(
         args.model_name_or_path, num_classes=2)
     
     print("Creating criterion")
@@ -151,7 +150,7 @@ def main(args):
     metric = F1_score()
     
     if args.test_only:
-        evaluate(model, criterion, validation_data_loader, metric)
+        evaluate(model, criterion, validation_data_loader, metric, logger)
         return
     
     print("Start training")
@@ -228,12 +227,12 @@ def main(args):
 def get_args_parser(add_help=True):
     import argparse
     parser = argparse.ArgumentParser(
-        description="Paddle QQP Classification Training", add_help=add_help)
+        description="Paddle BERT QQP Classification Training", add_help=add_help)
     parser.add_argument("--task_name", default="qqp",
                         help="the name of the glue task to train on.")
     parser.add_argument("--logging_file", default="qqp_log_base.txt",
                         help="path to save logging information")
-    parser.add_argument("--model_name_or_path", default="fnet-base",
+    parser.add_argument("--model_name_or_path", default="bert-base-uncased",
                         help="path to pretrained model or model identifier from huggingface.co/models.", )
     parser.add_argument("--device", default="gpu", help="device")
     parser.add_argument("--batch_size", default=16, type=int)
