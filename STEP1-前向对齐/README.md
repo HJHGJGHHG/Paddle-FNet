@@ -3,9 +3,9 @@
 # 生成classifier权重
 cd STEP1/ && python generate_classifier_weights.py
 # 生成paddle的前向数据
-python pd_forward_bert.py
+python pd_forward_fnet.py
 # 生成torch的前向数据
-python pt_forward_bert.py
+python pt_forward_fnet.py
 # 对比生成log
 python check_step1.py
 
